@@ -1,0 +1,52 @@
+	.equ	PRINT_STR, 8
+	.equ	READ_CT, 11
+	.equ	RESET_CT, 12
+
+	.data
+msg1:	.asciiz	"\n--> Contador binário em RE[0:3] a 4Hz"
+
+	.text
+	.globl	main
+
+main:	addiu	$sp, $sp, -4	
+	sw	$ra, 0($sp)		# save return address
+
+	li	$v0, PRINT_STR
+	la	$a0, msg1
+	syscall				# print msg1
+
+# Configuration of ports RE[0:3] (outputs) and RE[6:7] (inputs)
+	lui	$t1, SFR_BASE_HI
+	lw	$t2, TRISE($t1)		# read TRIS register of port E
+	and	$t2, $t2, 0xFFFFFFF0	# reset TRISE[0:3] (RE[0:3] become outputs)
+	ori	$t2, $t2, 0x0C0		# set TRISE[6:7] (RE[6:7] become inputs)
+	sw	$t2, TRISE($t1)		# update TRIS register of port E
+
+	li	$v0, RESET_CT
+	syscall				# clear Core Timer
+	li	$s0, 0				# start software binary counter
+
+# update RE[0:3] from $s0[0:3]
+
+lab1:	lw	$t0, PORTE($t1) 		# read PORT register of port E
+	and	$t0, $t0, 0xFFFFFFF0	# reset bit 0
+	move	$t2, $s0			# copy software counter to temporary var
+	and	$t2, $t2, 0x0F		# arrange mask
+	or	$t0, $t2, $t0			# update $t0[0:3] 
+	sw	$t0, PORTE($t1)		# update RE[0:3] 
+
+# wait 0.25s
+
+lab2:	li	$v0, READ_CT
+	syscall				# read Core Timer
+	bleu	$v0, 5000000, lab2		# wait until 0.25 sec elapses
+	li	$v0, RESET_CT
+	syscall				# reset Core Timer
+
+	addiu	$s0, $s0, 1			# increment software binary counter
+	j	lab1
+
+	lw	$ra,0($sp)		# retrieve return address
+	addiu	$sp,$sp,4		# update SP
+	li	$v0, 0			# return 0
+	jr	$ra			# ... and leave
